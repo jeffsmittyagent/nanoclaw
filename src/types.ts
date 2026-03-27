@@ -30,6 +30,7 @@ export interface AllowedRoot {
 export interface ContainerConfig {
   additionalMounts?: AdditionalMount[];
   timeout?: number; // Default: 300000 (5 minutes)
+  envVars?: string[]; // Names of .env vars to pass through into the container
 }
 
 export interface RegisteredGroup {
