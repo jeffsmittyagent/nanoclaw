@@ -234,6 +234,27 @@ Tell the user:
   - If using launchd: `launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist && launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist`
   - If running manually: restart `npm run dev`
 
+# Step 8.5: Update NanoClaw Watcher sync point
+
+After a successful update, keep the nanoclaw-watcher agent in sync so it doesn't false-alarm next Monday.
+
+Check if the watcher group exists:
+- `test -f groups/nanoclaw-watcher/CLAUDE.md && echo exists`
+
+If it exists:
+1. Get the new upstream commit hash and today's date:
+   - `NEW_HASH=$(git rev-parse upstream/$UPSTREAM_BRANCH)`
+   - `TODAY=$(date +%Y-%m-%d)`
+2. Get the new version from package.json:
+   - Read `package.json` and extract the `"version"` field
+3. Edit `groups/nanoclaw-watcher/CLAUDE.md` — update the three lines in the "Last known sync" section:
+   - `**Local version**`: set to the new version from package.json
+   - `**Last synced upstream commit**`: set to the full hash from step 1
+   - `**Synced on**`: set to today's date
+4. Do NOT commit this change — it is a runtime data file, not source code.
+
+If the file does not exist, skip silently.
+
 
 ## Diagnostics
 
