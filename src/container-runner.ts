@@ -26,7 +26,6 @@ import {
   stopContainer,
 } from './container-runtime.js';
 import { detectAuthMode } from './credential-proxy.js';
-import { readEnvFile } from './env.js';
 import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
@@ -78,7 +77,7 @@ function buildVolumeMounts(
       readonly: true,
     });
 
-    // .env is shadowed inside the container via mount --bind in entrypoint.sh
+    // .env shadowing is handled inside the container entrypoint via mount --bind
     // (Apple Container only supports directory mounts, not file mounts like /dev/null)
 
     // Main also gets its group folder as the working directory
@@ -219,7 +218,6 @@ function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
   isMain: boolean,
-  envVars?: string[],
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
@@ -241,15 +239,6 @@ function buildContainerArgs(
     args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
   } else {
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
-  }
-
-  // Pass through additional env vars from .env (e.g. third-party API credentials)
-  if (envVars && envVars.length > 0) {
-    const secrets = readEnvFile(envVars);
-    for (const key of envVars) {
-      const val = process.env[key] || secrets[key];
-      if (val) args.push('-e', `${key}=${val}`);
-    }
   }
 
   // Runtime-specific args for host gateway resolution
@@ -299,12 +288,7 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(
-    mounts,
-    containerName,
-    input.isMain,
-    group.containerConfig?.envVars,
-  );
+  const containerArgs = buildContainerArgs(mounts, containerName, input.isMain);
 
   logger.debug(
     {
