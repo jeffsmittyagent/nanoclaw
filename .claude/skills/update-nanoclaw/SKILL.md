@@ -255,8 +255,3 @@ If it exists:
 
 If the file does not exist, skip silently.
 
-
-## Diagnostics
-
-1. Use the Read tool to read `.claude/skills/update-nanoclaw/diagnostics.md`.
-2. Follow every step in that file before finishing.
