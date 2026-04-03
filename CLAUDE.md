@@ -25,6 +25,47 @@ Single Node.js process with skill-based channel system. Channels (WhatsApp, Tele
 
 API keys, secret keys, OAuth tokens, and auth credentials are managed by the OneCLI gateway — which handles secret injection into containers at request time, so no keys or tokens are ever passed to containers directly. Run `onecli --help`.
 
+## Fork-Specific Customizations (Preserve on Upstream Merges)
+
+This fork adds features not in upstream NanoClaw. When merging from `upstream/main`, verify these are not overwritten:
+
+### `containerConfig.envVars` — third-party credential pass-through
+
+**Files:** `src/container-runner.ts`, `src/types.ts`
+
+Upstream NanoClaw only injects Anthropic credentials into containers. This fork adds an `envVars` field to `ContainerConfig` that names `.env` vars to pass through as container environment variables — used by groups like TimeHound that need third-party API credentials (Zoho, etc.).
+
+`src/types.ts` must have:
+```ts
+export interface ContainerConfig {
+  envVars?: string[]; // Names of .env vars to pass through into the container
+  // ...
+}
+```
+
+`src/container-runner.ts` must have:
+1. `import { readEnvFile } from './env.js';` in the imports
+2. `envVars?: string[]` parameter on `buildContainerArgs`
+3. Pass-through block inside `buildContainerArgs` (after auth mode, before `hostGatewayArgs`):
+```ts
+if (envVars && envVars.length > 0) {
+  const secrets = readEnvFile(envVars);
+  for (const key of envVars) {
+    const val = process.env[key] || secrets[key];
+    if (val) args.push('-e', `${key}=${val}`);
+  }
+}
+```
+4. Call site passes `group.containerConfig?.envVars` as the fourth argument to `buildContainerArgs`
+
+This was broken by an upstream merge (`5591f21`) that replaced the entire `buildContainerArgs` function.
+
+### Credential proxy retry loop — indefinite retry
+
+**File:** `src/index.ts`
+
+The upstream proxy retry loop gives up after 60 seconds. This fork changes it to retry indefinitely at 5-second intervals. This is necessary because `bridge100` only comes up when the first container VM starts (which can be minutes after NanoClaw boots), and a fixed cap causes the proxy to give up before any container ever runs. The loop must use `while (true)` with no max-attempts cap and a 5-second sleep between `EADDRNOTAVAIL` failures.
+
 ## Skills
 
 Four types of skills exist in NanoClaw. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full taxonomy and guidelines.
@@ -74,6 +115,8 @@ systemctl --user restart nanoclaw
 ## Troubleshooting
 
 **WhatsApp not connecting after upgrade:** WhatsApp is now a separate skill, not bundled in core. Run `/add-whatsapp` (or `npx tsx scripts/apply-skill.ts .claude/skills/add-whatsapp && npm run build`) to install it. Existing auth credentials and groups are preserved.
+
+**Bot not responding after reboot / `EADDRNOTAVAIL 192.168.64.1:3001`:** Apple Container's bridge interface (`bridge100`) only comes up when a container VM starts — it does not exist at boot. The credential proxy (`src/credential-proxy.ts`) binds to this IP, so it cannot start until the first container runs. NanoClaw handles this with a background retry loop that retries every 5 seconds indefinitely — the proxy will bind automatically once the first container brings up `bridge100`. Ensure the Apple Container daemon is running: `container system start`.
 
 ## Container Build Cache
 

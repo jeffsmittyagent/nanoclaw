@@ -26,8 +26,8 @@ import {
 } from './container-runner.js';
 import {
   cleanupOrphans,
+  detectHostGateway,
   ensureContainerRuntimeRunning,
-  PROXY_BIND_HOST,
 } from './container-runtime.js';
 import {
   getAllChats,
@@ -626,16 +626,37 @@ async function main(): Promise<void> {
   loadState();
   restoreRemoteControl();
 
-  // Start credential proxy (containers route API calls through this)
-  const proxyServer = await startCredentialProxy(
-    CREDENTIAL_PROXY_PORT,
-    PROXY_BIND_HOST,
-  );
+  // Start credential proxy in the background with retry.
+  // The Apple Container bridge (192.168.64.1) only comes up when a VM starts,
+  // so we can't bind at boot. We retry indefinitely until the bridge is available.
+  let proxyServer: import('http').Server | null = null;
+  (async () => {
+    let attempt = 0;
+    while (true) {
+      attempt++;
+      const host = detectHostGateway();
+      try {
+        proxyServer = await startCredentialProxy(CREDENTIAL_PROXY_PORT, host);
+        logger.info({ host, port: CREDENTIAL_PROXY_PORT }, 'Credential proxy started');
+        return;
+      } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException).code === 'EADDRNOTAVAIL') {
+          if (attempt === 1) {
+            logger.info('Container bridge not ready; proxy will retry every 5s until bridge comes up');
+          }
+          await new Promise((r) => setTimeout(r, 5000));
+        } else {
+          logger.error({ err }, 'Credential proxy failed to start');
+          return;
+        }
+      }
+    }
+  })();
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
-    proxyServer.close();
+    proxyServer?.close();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
     process.exit(0);

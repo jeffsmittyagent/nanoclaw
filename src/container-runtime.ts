@@ -17,7 +17,7 @@ export const CONTAINER_RUNTIME_BIN = 'container';
  */
 export const CONTAINER_HOST_GATEWAY = detectHostGateway();
 
-function detectHostGateway(): string {
+export function detectHostGateway(): string {
   // Apple Container on macOS: containers reach the host via the bridge network gateway
   const ifaces = os.networkInterfaces();
   const bridge = ifaces['bridge100'] || ifaces['bridge0'];
