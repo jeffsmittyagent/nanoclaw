@@ -242,9 +242,7 @@ export class DiscordChannel implements Channel {
     if (!this.client || !isTyping) return;
     // Race against a timeout so a hung Discord REST call can't block the
     // message queue. The typing indicator is fire-and-forget UX.
-    const timeout = new Promise<void>((resolve) =>
-      setTimeout(resolve, 5000),
-    );
+    const timeout = new Promise<void>((resolve) => setTimeout(resolve, 5000));
     const send = (async () => {
       try {
         const channelId = jid.replace(/^dc:/, '');
