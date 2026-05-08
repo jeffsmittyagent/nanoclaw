@@ -240,15 +240,23 @@ export class DiscordChannel implements Channel {
 
   async setTyping(jid: string, isTyping: boolean): Promise<void> {
     if (!this.client || !isTyping) return;
-    try {
-      const channelId = jid.replace(/^dc:/, '');
-      const channel = await this.client.channels.fetch(channelId);
-      if (channel && 'sendTyping' in channel) {
-        await (channel as TextChannel).sendTyping();
+    // Race against a timeout so a hung Discord REST call can't block the
+    // message queue. The typing indicator is fire-and-forget UX.
+    const timeout = new Promise<void>((resolve) =>
+      setTimeout(resolve, 5000),
+    );
+    const send = (async () => {
+      try {
+        const channelId = jid.replace(/^dc:/, '');
+        const channel = await this.client!.channels.fetch(channelId);
+        if (channel && 'sendTyping' in channel) {
+          await (channel as TextChannel).sendTyping();
+        }
+      } catch (err) {
+        logger.debug({ jid, err }, 'Failed to send Discord typing indicator');
       }
-    } catch (err) {
-      logger.debug({ jid, err }, 'Failed to send Discord typing indicator');
-    }
+    })();
+    await Promise.race([send, timeout]);
   }
 }
 
